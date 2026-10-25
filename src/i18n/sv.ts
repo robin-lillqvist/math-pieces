@@ -5,11 +5,17 @@ export const sv = {
   done: "Klar!",
   next: "Nästa",
   correct: "Rätt! Bra jobbat!",
-  tooFew: "Nästan! Det är lite för lite.",
-  tooMany: "Nästan! Det är för mycket.",
+  tooFew: "Nästan! Det är lite för lite. Lägg till en bit till.",
+  tooMany: "Nästan! Det är för mycket. Tryck på en bit för att ta bort den.",
   noRoom: "Det får inte plats!",
   levelUp: "Du klarade nivån! Nu kommer en ny.",
-  hint: "Fyll den streckade bågen.",
+  /** What the child is asked to do, in words: what is missing and how to fill it. */
+  instruction: (target: Fraction, singlePiece: boolean) => ({
+    title: `Det fattas ${fractionWords(target)}.`,
+    body: singlePiece
+      ? "Hitta biten som är exakt lika stor som den streckade luckan."
+      : "Fyll luckan med bitarna du har. Tillsammans ska de bli exakt lika stora som luckan. Några bitar är för stora och några passar inte.",
+  }),
 };
 
 const NUMBERS = ["noll", "en", "två", "tre", "fyra", "fem", "sex", "sju", "åtta", "nio", "tio", "elva", "tolv"];

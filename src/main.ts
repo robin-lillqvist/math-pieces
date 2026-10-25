@@ -143,7 +143,10 @@ function startRound(): void {
   solved = false;
   board.classList.remove("win");
   doneBtn.textContent = sv.done;
-  setMessage(sv.hint);
+  const text = sv.instruction(puzzle.target, level.solutionMax === 1);
+  $("instr-title").textContent = text.title;
+  $("instr-body").textContent = text.body;
+  setMessage("");
   renderHeader();
   renderRing();
   renderTray();

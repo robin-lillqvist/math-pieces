@@ -90,8 +90,9 @@ describe("generatePuzzle", () => {
         if (p.pieces.some((x) => compare(x, p.target) > 0)) withTooLarge++;
         previous = p.target;
       }
-      // most trays should hold pieces that are simply too big
-      expect(withTooLarge / rounds).toBeGreaterThan(0.6);
+      // most trays should hold pieces that are simply too big (level 2 only adds up
+      // halves, thirds and quarters, so its totals are mostly bigger than any piece)
+      if (level.id !== 2) expect(withTooLarge / rounds).toBeGreaterThan(0.6);
     });
   }
 
@@ -100,7 +101,7 @@ describe("generatePuzzle", () => {
     const targets = new Set<string>();
     const trays = new Set<string>();
     for (let i = 0; i < 40; i++) {
-      const p = generatePuzzle(LEVELS[3], undefined, rand);
+      const p = generatePuzzle(LEVELS[5], undefined, rand);
       targets.add(`${p.target.num}/${p.target.den}`);
       trays.add(p.pieces.map((x) => `${x.num}/${x.den}`).sort().join(","));
     }
@@ -108,9 +109,29 @@ describe("generatePuzzle", () => {
     expect(trays.size).toBeGreaterThan(30);
   });
 
-  it("level 6 offers non-unit pieces", () => {
+  it("starts gently: level 1 is a single-piece match, levels 1-3 are small trays of simple fractions", () => {
+    const rand = mulberry32(11);
+    for (let i = 0; i < 40; i++) {
+      const p = generatePuzzle(LEVELS[0], undefined, rand);
+      expect(p.pieces.length).toBeLessThanOrEqual(4);
+      expect(p.pieces.some((x) => compare(x, p.target) === 0)).toBe(true);
+    }
+    for (const level of LEVELS.slice(0, 3)) {
+      expect(level.trayCount).toBeLessThanOrEqual(5);
+      expect(Math.max(...level.dens)).toBeLessThanOrEqual(6);
+      expect(level.solutionMax).toBeLessThanOrEqual(2);
+      expect(level.streakToUnlock).toBe(3);
+    }
+  });
+
+  it("the unit-fraction ramp gets harder: tray size never shrinks from one level to the next", () => {
+    const sizes = LEVELS.filter((l) => !l.free).map((l) => l.trayCount);
+    expect([...sizes].sort((a, b) => a - b)).toEqual(sizes);
+  });
+
+  it("level 8 offers non-unit pieces", () => {
     const rand = mulberry32(7);
-    const seen = Array.from({ length: 40 }, () => generatePuzzle(LEVELS[5], undefined, rand)).some((p) =>
+    const seen = Array.from({ length: 40 }, () => generatePuzzle(LEVELS[7], undefined, rand)).some((p) =>
       p.pieces.some((x) => x.num > 1),
     );
     expect(seen).toBe(true);
@@ -146,9 +167,14 @@ describe("check", () => {
 });
 
 describe("nextLevelIndex", () => {
-  it("advances after a streak and stops at the last level", () => {
-    expect(nextLevelIndex(0, 4)).toBe(0);
-    expect(nextLevelIndex(0, 5)).toBe(1);
+  it("early levels unlock after 3 in a row, later ones after 5", () => {
+    expect(nextLevelIndex(0, 2)).toBe(0);
+    expect(nextLevelIndex(0, 3)).toBe(1);
+    expect(nextLevelIndex(3, 4)).toBe(3);
+    expect(nextLevelIndex(3, 5)).toBe(4);
+  });
+
+  it("stops at the last level", () => {
     expect(nextLevelIndex(LEVELS.length - 1, 9)).toBe(LEVELS.length - 1);
   });
 });

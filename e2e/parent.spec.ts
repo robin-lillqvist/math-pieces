@@ -32,9 +32,9 @@ test("mute is saved", async ({ page }) => {
 test("the level picker jumps to another level", async ({ page }) => {
   await page.goto("/");
   await openParentCorner(page);
-  await page.selectOption("#level-select", { value: "2" });
+  await page.selectOption("#level-select", { value: "3" });
   await page.click("#close-parent");
-  await expect(page.locator("#level")).toHaveText("Nivå 3");
+  await expect(page.locator("#level")).toHaveText("Nivå 4");
   expect((await trayPieces(page)).length).toBeGreaterThanOrEqual(6);
 });
 
@@ -50,7 +50,7 @@ test("reset clears level and stars", async ({ page }) => {
 });
 
 test("free play respects the largest denominator", async ({ page }) => {
-  await seed(page, { levelIndex: 6, streak: 0, stars: 0, muted: true, maxDen: 4 });
+  await seed(page, { levelIndex: 8, streak: 0, stars: 0, muted: true, maxDen: 4 });
   await page.goto("/");
   await expect(page.locator("#level")).toHaveText("Fri lek");
   for (let i = 0; i < 20; i++) {

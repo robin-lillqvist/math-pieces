@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { KEY, reloadUntil, seed, solutions, solve, target, trayPieces } from "./helpers";
 
-test("five correct answers in a row unlock the next level and survive a reload", async ({ page }) => {
+test("three correct answers in a row unlock level 2 and survive a reload", async ({ page }) => {
   await page.goto("/");
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 3; i++) {
     await solve(page);
     await page.click("#done"); // next round
   }
@@ -12,9 +12,26 @@ test("five correct answers in a row unlock the next level and survive a reload",
   await expect(page.locator("#level")).toHaveText("Nivå 2");
 });
 
+test("two correct answers are not enough to unlock level 2", async ({ page }) => {
+  await page.goto("/");
+  for (let i = 0; i < 2; i++) {
+    await solve(page);
+    await page.click("#done");
+  }
+  await expect(page.locator("#level")).toHaveText("Nivå 1");
+});
+
+test("level 1 starts gently: a few pieces, one of which matches the target", async ({ page }) => {
+  await page.goto("/");
+  const pieces = await trayPieces(page);
+  expect(pieces.length).toBeLessThanOrEqual(4);
+  const t = await target(page);
+  expect(pieces.some((p) => p.num * t.den === t.num * p.den)).toBe(true);
+});
+
 test("a miss resets the streak", async ({ page }) => {
   await page.goto("/");
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 2; i++) {
     await solve(page);
     await page.click("#done");
   }
@@ -30,7 +47,7 @@ test("stars are earned per correct answer", async ({ page }) => {
 });
 
 test("later levels hand out bigger trays with more different sizes", async ({ page }) => {
-  await seed(page, { levelIndex: 4, streak: 0, stars: 0, muted: true, maxDen: 10 });
+  await seed(page, { levelIndex: 6, streak: 0, stars: 0, muted: true, maxDen: 10 });
   await page.goto("/");
   const pieces = await trayPieces(page);
   expect(pieces.length).toBeGreaterThanOrEqual(7);
@@ -38,8 +55,8 @@ test("later levels hand out bigger trays with more different sizes", async ({ pa
   expect(solutions(await target(page), pieces)).toHaveLength(1);
 });
 
-test("level 6 can hand out pieces like 3/4 and they still solve", async ({ page }) => {
-  await seed(page, { levelIndex: 5, streak: 0, stars: 0, muted: true, maxDen: 10 });
+test("level 8 can hand out pieces like 3/4 and they still solve", async ({ page }) => {
+  await seed(page, { levelIndex: 7, streak: 0, stars: 0, muted: true, maxDen: 10 });
   await page.goto("/");
   await reloadUntil(page, async () => (await trayPieces(page)).some((p) => p.num > 1));
   await solve(page);

@@ -18,8 +18,54 @@ test.beforeEach(async ({ page }) => {
 test("shows a dashed target arc and a tray of mixed pieces", async ({ page }) => {
   await expect(page.locator("#ring .target-arc")).toHaveCount(1);
   const pieces = await trayPieces(page);
-  expect(pieces.length).toBeGreaterThanOrEqual(5);
+  expect(pieces.length).toBeGreaterThanOrEqual(4);
   expect(new Set(pieces.map((p) => `${p.num}/${p.den}`)).size).toBeGreaterThanOrEqual(3);
+});
+
+test("explains the task in words: what is missing and how to fill it", async ({ page }) => {
+  await expect(page.locator("#instr-title")).toHaveText(/^Det fattas .+\.$/);
+  // level 1 has a single matching piece, so the wording is the simple one
+  await expect(page.locator("#instr-body")).toContainText("exakt lika stor");
+});
+
+test("the instruction names the target fraction in words and changes with each round", async ({ page }) => {
+  const words: Record<string, string> = {
+    "1/2": "en halv",
+    "1/3": "en tredjedel",
+    "2/3": "två tredjedelar",
+    "1/4": "en fjärdedel",
+    "3/4": "tre fjärdedelar",
+    "1/6": "en sjättedel",
+  };
+  const titles = new Set<string>();
+  for (let i = 0; i < 6; i++) {
+    const t = await target(page);
+    const expected = words[`${t.num}/${t.den}`];
+    if (expected) await expect(page.locator("#instr-title")).toHaveText(`Det fattas ${expected}.`);
+    titles.add((await page.locator("#instr-title").textContent())!);
+    await page.reload();
+  }
+  expect(titles.size).toBeGreaterThanOrEqual(2);
+});
+
+test("later levels explain that pieces must add up together", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate((k) => localStorage.setItem(k, JSON.stringify({ levelIndex: 3, streak: 0, stars: 0, muted: true, maxDen: 10 })), "brakpajen.progress.v1");
+  await page.reload();
+  await expect(page.locator("#instr-body")).toContainText("Fyll luckan med bitarna du har");
+  await expect(page.locator("#instr-body")).toContainText("Tillsammans");
+});
+
+test("the hints say what to do next", async ({ page }) => {
+  await reloadUntil(page, async () => {
+    const t = await target(page);
+    return (await trayPieces(page)).some((p) => value(p) > value(t));
+  });
+  const t = await target(page);
+  const big = (await trayPieces(page)).find((p) => value(p) > value(t))!;
+  await dragPiece(page, `${big.num}/${big.den}`);
+  await page.click("#done");
+  await expect(page.locator("#message")).toContainText("Tryck på en bit för att ta bort den");
 });
 
 test("exactly one combination of the tray makes the target", async ({ page }) => {
@@ -68,9 +114,14 @@ test("a piece that is too big gives the 'too much' hint", async ({ page }) => {
   await expect(page.locator("#board")).not.toHaveClass(/win/);
 });
 
-test("an incomplete answer gives the 'too little' hint", async ({ page }) => {
-  const [answer] = solutions(await target(page), await trayPieces(page));
-  await dragPiece(page, answer[0]);
+test("a piece that is too small gives the 'too little' hint", async ({ page }) => {
+  await reloadUntil(page, async () => {
+    const t = await target(page);
+    return (await trayPieces(page)).some((p) => value(p) < value(t));
+  });
+  const t = await target(page);
+  const small = (await trayPieces(page)).find((p) => value(p) < value(t))!;
+  await dragPiece(page, `${small.num}/${small.den}`);
   await page.click("#done");
   await expect(page.locator("#message")).toContainText("lite för lite");
 });
@@ -115,5 +166,5 @@ test("every round is a different puzzle", async ({ page }) => {
     await solve(page);
     await page.click("#done");
   }
-  expect(seen.size).toBeGreaterThanOrEqual(5);
+  expect(seen.size).toBeGreaterThanOrEqual(4);
 });

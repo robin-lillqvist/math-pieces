@@ -22,6 +22,10 @@ export interface Level {
   solutionMax: number;
   /** Allow pieces like 3/4 and 2/3, not only 1/n. */
   nonUnit?: boolean;
+  /** Correct answers in a row needed to unlock the next level (default STREAK_TO_UNLOCK). */
+  streakToUnlock?: number;
+  /** Largest denominator of the target; early levels keep it small (default TARGET_DEN_CAP). */
+  maxTargetDen?: number;
   /** Free play: a parent caps the largest denominator. */
   free?: boolean;
 }
@@ -29,13 +33,16 @@ export interface Level {
 const ALL_DENS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12];
 
 export const LEVELS: Level[] = [
-  { id: 1, dens: [2, 3, 4, 6], trayCount: 5, solutionMin: 2, solutionMax: 2 },
-  { id: 2, dens: [2, 3, 4, 6, 8], trayCount: 6, solutionMin: 2, solutionMax: 3 },
-  { id: 3, dens: [2, 3, 4, 6, 8, 12], trayCount: 7, solutionMin: 2, solutionMax: 3 },
-  { id: 4, dens: [2, 3, 4, 5, 6, 8, 10], trayCount: 8, solutionMin: 2, solutionMax: 3 },
-  { id: 5, dens: ALL_DENS, trayCount: 8, solutionMin: 2, solutionMax: 4 },
-  { id: 6, dens: ALL_DENS, trayCount: 9, solutionMin: 2, solutionMax: 4, nonUnit: true },
-  { id: 7, dens: ALL_DENS, trayCount: 8, solutionMin: 2, solutionMax: 3, free: true },
+  // Gentle start: one piece matches the target, then two pieces from halves, thirds and quarters.
+  { id: 1, dens: [2, 3, 4, 6], trayCount: 4, solutionMin: 1, solutionMax: 1, streakToUnlock: 3 },
+  { id: 2, dens: [2, 3, 4], trayCount: 4, solutionMin: 2, solutionMax: 2, streakToUnlock: 3 },
+  { id: 3, dens: [2, 3, 4, 6], trayCount: 5, solutionMin: 2, solutionMax: 2, streakToUnlock: 3 },
+  { id: 4, dens: [2, 3, 4, 6, 12], trayCount: 6, solutionMin: 2, solutionMax: 3, maxTargetDen: 12 },
+  { id: 5, dens: [2, 3, 4, 6, 8, 12], trayCount: 7, solutionMin: 2, solutionMax: 3, maxTargetDen: 12 },
+  { id: 6, dens: [2, 3, 4, 5, 6, 8, 10], trayCount: 8, solutionMin: 2, solutionMax: 3, maxTargetDen: 20 },
+  { id: 7, dens: ALL_DENS, trayCount: 8, solutionMin: 2, solutionMax: 4 },
+  { id: 8, dens: ALL_DENS, trayCount: 9, solutionMin: 2, solutionMax: 4, nonUnit: true },
+  { id: 9, dens: ALL_DENS, trayCount: 8, solutionMin: 2, solutionMax: 3, free: true },
 ];
 
 export const STREAK_TO_UNLOCK = 5;
@@ -123,10 +130,15 @@ const FALLBACK: Puzzle = {
   ],
 };
 
+const sizeKey = (f: Fraction): string => `${f.num}/${f.den}`;
+
 /**
  * A tray of mixed pieces and a target that exactly one combination of them makes.
- * The tray normally holds pieces larger than the target (they can never be used),
- * and pieces of at least three different sizes.
+ *
+ * It picks the winning pieces first (so targets are spread evenly over what the level
+ * can make), then adds decoys one at a time, keeping only decoys that don't create a
+ * second way to reach the target. Decoys larger than the target come first, since they
+ * can never be used, and the tray gets at least three different sizes.
  */
 export function generatePuzzle(
   level: Level,
@@ -134,22 +146,34 @@ export function generatePuzzle(
   rand: () => number = Math.random,
 ): Puzzle {
   const pool = sizePool(level);
-  for (let tray = level.trayCount; tray > level.solutionMin; tray--) {
-    for (let attempt = 0; attempt < 300; attempt++) {
-      const wantTooLarge = attempt < 200;
-      const sizes = Array.from({ length: tray }, () => pool[Math.floor(rand() * pool.length)]);
-      if (new Set(sizes.map((s) => `${s.num}/${s.den}`)).size < Math.min(3, pool.length)) continue;
+  const pick = () => pool[Math.floor(rand() * pool.length)];
+  const maxDen = level.maxTargetDen ?? TARGET_DEN_CAP;
 
-      const k = level.solutionMin + Math.floor(rand() * (Math.min(level.solutionMax, tray - 1) - level.solutionMin + 1));
-      const chosen = shuffle(sizes, rand).slice(0, k);
-      const target = sum(chosen);
-      if (compare(target, ONE) >= 0 || target.den > TARGET_DEN_CAP) continue;
-      if (previous && sameFraction(target, previous)) continue;
-      if (wantTooLarge && !sizes.some((s) => compare(s, target) > 0)) continue;
-      if (countSolutions(target, sizes) !== 1) continue;
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const strict = attempt < 250;
+    const k = level.solutionMin + Math.floor(rand() * (level.solutionMax - level.solutionMin + 1));
+    const winners = Array.from({ length: k }, pick);
+    const target = sum(winners);
+    if (compare(target, ONE) >= 0 || target.den > maxDen) continue;
+    if (previous && sameFraction(target, previous)) continue;
 
-      return { target, pieces: shuffle(sizes, rand).map((s, id) => ({ ...s, id })) };
+    const tray: Fraction[] = [...winners];
+    while (tray.length < level.trayCount) {
+      const candidates = shuffle(pool, rand);
+      // too-large decoys first until the tray has one
+      if (strict && !tray.some((p) => compare(p, target) > 0)) {
+        candidates.sort((a, b) => Number(compare(b, target) > 0) - Number(compare(a, target) > 0));
+      }
+      const next = candidates.find((c) => countSolutions(target, [...tray, c]) === 1);
+      if (!next) break;
+      tray.push(next);
     }
+
+    if (tray.length < (strict ? level.trayCount : k + 1)) continue;
+    if (new Set(tray.map(sizeKey)).size < Math.min(3, pool.length)) continue;
+    if (strict && !tray.some((p) => compare(p, target) > 0)) continue;
+
+    return { target, pieces: shuffle(tray, rand).map((s, id) => ({ ...s, id })) };
   }
   return FALLBACK;
 }
@@ -163,6 +187,7 @@ export function check(target: Fraction, placed: Fraction[]): Verdict {
 }
 
 export function nextLevelIndex(current: number, streak: number): number {
-  if (streak >= STREAK_TO_UNLOCK && current < LEVELS.length - 1) return current + 1;
+  const needed = LEVELS[current].streakToUnlock ?? STREAK_TO_UNLOCK;
+  if (streak >= needed && current < LEVELS.length - 1) return current + 1;
   return current;
 }
