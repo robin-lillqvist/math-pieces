@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Bråkpajen</title>
+    <meta name="theme-color" content="#fff8e7" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <header>
+        <div id="level" aria-live="polite"></div>
+        <div id="fraction" class="fraction" aria-live="polite"></div>
+        <div id="stars"></div>
+      </header>
+      <section id="board">
+        <svg id="ring" viewBox="-110 -110 220 220" aria-label="Bråkcirkel"></svg>
+        <div id="message" role="status"></div>
+      </section>
+      <section id="tray" aria-label="Bitar"></section>
+      <footer>
+        <button id="done" type="button">Klar!</button>
+      </footer>
+    </main>
+    <dialog id="parent">
+      <h2>Föräldrar</h2>
+      <label><input type="checkbox" id="mute" /> Ljud av</label>
+      <label>Nivå <select id="level-select"></select></label>
+      <label>Fri lek, största nämnare <select id="max-den"></select></label>
+      <button type="button" id="reset" class="secondary">Nollställ framsteg</button>
+      <button type="button" id="close-parent" class="secondary">Stäng</button>
+    </dialog>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
