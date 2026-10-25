@@ -50,7 +50,7 @@ test("later levels hand out bigger trays with more different sizes", async ({ pa
   await seed(page, { levelIndex: 6, streak: 0, stars: 0, muted: true, maxDen: 10 });
   await page.goto("/");
   const pieces = await trayPieces(page);
-  expect(pieces.length).toBeGreaterThanOrEqual(7);
+  expect(pieces.length).toBeGreaterThanOrEqual(5);
   expect(new Set(pieces.map((p) => p.den)).size).toBeGreaterThanOrEqual(3);
   expect(solutions(await target(page), pieces)).toHaveLength(1);
 });
@@ -61,6 +61,19 @@ test("level 8 can hand out pieces like 3/4 and they still solve", async ({ page 
   await reloadUntil(page, async () => (await trayPieces(page)).some((p) => p.num > 1));
   await solve(page);
   await expect(page.locator("#message")).toContainText("Rätt");
+});
+
+test("nothing smaller than tenths ever shows up, on any level", async ({ page }) => {
+  for (const levelIndex of [0, 3, 5, 7]) {
+    await seed(page, { levelIndex, streak: 0, stars: 0, muted: true, maxDen: 10 });
+    await page.goto("/");
+    for (let i = 0; i < 8; i++) {
+      expect((await target(page)).den).toBeLessThanOrEqual(10);
+      for (const p of await trayPieces(page)) expect(p.den).toBeLessThanOrEqual(10);
+      await page.reload();
+    }
+    await page.evaluate((k) => localStorage.removeItem(k), KEY);
+  }
 });
 
 test("corrupt saved progress falls back to a fresh start", async ({ page }) => {

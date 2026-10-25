@@ -24,31 +24,29 @@ export interface Level {
   nonUnit?: boolean;
   /** Correct answers in a row needed to unlock the next level (default STREAK_TO_UNLOCK). */
   streakToUnlock?: number;
-  /** Largest denominator of the target; early levels keep it small (default TARGET_DEN_CAP). */
-  maxTargetDen?: number;
   /** Free play: a parent caps the largest denominator. */
   free?: boolean;
 }
 
-const ALL_DENS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12];
+/** Nothing smaller than tenths, for pieces and for targets: smaller parts are too abstract for a child. */
+export const MAX_DEN = 10;
+
+const ALL_DENS = [2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 export const LEVELS: Level[] = [
   // Gentle start: one piece matches the target, then two pieces from halves, thirds and quarters.
   { id: 1, dens: [2, 3, 4, 6], trayCount: 4, solutionMin: 1, solutionMax: 1, streakToUnlock: 3 },
   { id: 2, dens: [2, 3, 4], trayCount: 4, solutionMin: 2, solutionMax: 2, streakToUnlock: 3 },
   { id: 3, dens: [2, 3, 4, 6], trayCount: 5, solutionMin: 2, solutionMax: 2, streakToUnlock: 3 },
-  { id: 4, dens: [2, 3, 4, 6, 12], trayCount: 6, solutionMin: 2, solutionMax: 3, maxTargetDen: 12 },
-  { id: 5, dens: [2, 3, 4, 6, 8, 12], trayCount: 7, solutionMin: 2, solutionMax: 3, maxTargetDen: 12 },
-  { id: 6, dens: [2, 3, 4, 5, 6, 8, 10], trayCount: 8, solutionMin: 2, solutionMax: 3, maxTargetDen: 20 },
+  { id: 4, dens: [2, 3, 4, 6, 8], trayCount: 6, solutionMin: 2, solutionMax: 3 },
+  { id: 5, dens: [2, 3, 4, 5, 6, 8, 10], trayCount: 7, solutionMin: 2, solutionMax: 3 },
+  { id: 6, dens: ALL_DENS, trayCount: 8, solutionMin: 2, solutionMax: 3 },
   { id: 7, dens: ALL_DENS, trayCount: 8, solutionMin: 2, solutionMax: 4 },
   { id: 8, dens: ALL_DENS, trayCount: 9, solutionMin: 2, solutionMax: 4, nonUnit: true },
   { id: 9, dens: ALL_DENS, trayCount: 8, solutionMin: 2, solutionMax: 3, free: true },
 ];
 
 export const STREAK_TO_UNLOCK = 5;
-
-/** Targets stay readable for a child: the denominator never grows past this. */
-export const TARGET_DEN_CAP = 24;
 
 const ZERO: Fraction = { num: 0, den: 1 };
 const ONE: Fraction = { num: 1, den: 1 };
@@ -147,14 +145,13 @@ export function generatePuzzle(
 ): Puzzle {
   const pool = sizePool(level);
   const pick = () => pool[Math.floor(rand() * pool.length)];
-  const maxDen = level.maxTargetDen ?? TARGET_DEN_CAP;
 
   for (let attempt = 0; attempt < 400; attempt++) {
     const strict = attempt < 250;
     const k = level.solutionMin + Math.floor(rand() * (level.solutionMax - level.solutionMin + 1));
     const winners = Array.from({ length: k }, pick);
     const target = sum(winners);
-    if (compare(target, ONE) >= 0 || target.den > maxDen) continue;
+    if (compare(target, ONE) >= 0 || target.den > MAX_DEN) continue;
     if (previous && sameFraction(target, previous)) continue;
 
     const tray: Fraction[] = [...winners];
@@ -169,9 +166,12 @@ export function generatePuzzle(
       tray.push(next);
     }
 
-    if (tray.length < (strict ? level.trayCount : k + 1)) continue;
+    // a tray one or two short is fine: some targets simply have no more safe decoys
+    if (tray.length < (strict ? Math.max(k + 1, level.trayCount - 2) : k + 1)) continue;
     if (new Set(tray.map(sizeKey)).size < Math.min(3, pool.length)) continue;
-    if (strict && !tray.some((p) => compare(p, target) > 0)) continue;
+    // a piece bigger than the target can never be used: have one whenever the level has such a piece
+    const tooLargeExists = pool.some((p) => compare(p, target) > 0);
+    if (strict && tooLargeExists && !tray.some((p) => compare(p, target) > 0)) continue;
 
     return { target, pieces: shuffle(tray, rand).map((s, id) => ({ ...s, id })) };
   }

@@ -35,7 +35,7 @@ test("the level picker jumps to another level", async ({ page }) => {
   await page.selectOption("#level-select", { value: "3" });
   await page.click("#close-parent");
   await expect(page.locator("#level")).toHaveText("Nivå 4");
-  expect((await trayPieces(page)).length).toBeGreaterThanOrEqual(6);
+  expect((await trayPieces(page)).length).toBeGreaterThanOrEqual(4);
 });
 
 test("reset clears level and stars", async ({ page }) => {

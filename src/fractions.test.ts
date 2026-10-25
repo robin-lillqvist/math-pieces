@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   LEVELS,
-  TARGET_DEN_CAP,
+  MAX_DEN,
   add,
   check,
   compare,
@@ -74,25 +74,28 @@ describe("generatePuzzle", () => {
     it(`level ${level.id}: exactly one solution, valid pieces, never a repeated target`, () => {
       const rand = mulberry32(level.id * 1000);
       let previous = undefined as ReturnType<typeof generatePuzzle>["target"] | undefined;
-      let withTooLarge = 0;
+      let missingTooLarge = 0;
       const rounds = 60;
+      // a piece bigger than the target can only exist if the level has one that big
+      const biggest = Math.max(...level.dens.map((d) => (level.nonUnit ? Math.min(3, d - 1) / d : 1 / d)));
       for (let i = 0; i < rounds; i++) {
         const p = generatePuzzle(level, previous, rand);
         expect(countSolutions(p.target, p.pieces)).toBe(1);
         expect(value(p.target)).toBeGreaterThan(0);
         expect(value(p.target)).toBeLessThan(1);
-        expect(p.target.den).toBeLessThanOrEqual(TARGET_DEN_CAP);
+        // nothing smaller than tenths, in the target or in the tray
+        expect(p.target.den).toBeLessThanOrEqual(MAX_DEN);
+        for (const piece of p.pieces) expect(piece.den).toBeLessThanOrEqual(MAX_DEN);
         expect(p.pieces.length).toBeLessThanOrEqual(level.trayCount);
         expect(p.pieces.length).toBeGreaterThan(level.solutionMin);
         for (const piece of p.pieces) expect(level.dens).toContain(piece.den);
         expect(new Set(p.pieces.map((x) => x.id)).size).toBe(p.pieces.length);
         if (previous) expect(compare(p.target, previous)).not.toBe(0);
-        if (p.pieces.some((x) => compare(x, p.target) > 0)) withTooLarge++;
+        if (value(p.target) < biggest && !p.pieces.some((x) => compare(x, p.target) > 0)) missingTooLarge++;
         previous = p.target;
       }
-      // most trays should hold pieces that are simply too big (level 2 only adds up
-      // halves, thirds and quarters, so its totals are mostly bigger than any piece)
-      if (level.id !== 2) expect(withTooLarge / rounds).toBeGreaterThan(0.6);
+      // whenever a too-big piece is possible the tray holds one (rare fallbacks aside)
+      expect(missingTooLarge / rounds).toBeLessThan(0.1);
     });
   }
 

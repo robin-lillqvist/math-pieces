@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
 test("shows a dashed target arc and a tray of mixed pieces", async ({ page }) => {
   await expect(page.locator("#ring .target-arc")).toHaveCount(1);
   const pieces = await trayPieces(page);
-  expect(pieces.length).toBeGreaterThanOrEqual(4);
+  expect(pieces.length).toBeGreaterThanOrEqual(3);
   expect(new Set(pieces.map((p) => `${p.num}/${p.den}`)).size).toBeGreaterThanOrEqual(3);
 });
 
