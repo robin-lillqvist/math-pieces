@@ -1,70 +1,119 @@
 import { expect, test } from "@playwright/test";
-import { dragPieces, placed, solve, target } from "./helpers";
+import {
+  dragPiece,
+  placedPieces,
+  reloadUntil,
+  solutions,
+  solve,
+  target,
+  total,
+  trayPieces,
+  value,
+} from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
 });
 
-test("round starts with a ring split by the denominator and a matching tray", async ({ page }) => {
-  const { num, den } = await target(page);
-  expect([2, 4]).toContain(den); // level 1
-  await expect(page.locator("#ring path.slot")).toHaveCount(den);
-  await expect(page.locator(".slot.target")).toHaveCount(num);
-  await expect(page.locator("#tray .piece")).toHaveCount(Math.min(den, num + 2));
+test("shows a dashed target arc and a tray of mixed pieces", async ({ page }) => {
+  await expect(page.locator("#ring .target-arc")).toHaveCount(1);
+  const pieces = await trayPieces(page);
+  expect(pieces.length).toBeGreaterThanOrEqual(5);
+  expect(new Set(pieces.map((p) => `${p.num}/${p.den}`)).size).toBeGreaterThanOrEqual(3);
 });
 
-test("filling exactly the numerator wins the round", async ({ page }) => {
+test("exactly one combination of the tray makes the target", async ({ page }) => {
+  for (let i = 0; i < 8; i++) {
+    expect(solutions(await target(page), await trayPieces(page))).toHaveLength(1);
+    await page.reload();
+  }
+});
+
+test("the tray has pieces that are too big to ever be used", async ({ page }) => {
+  await reloadUntil(page, async () => {
+    const t = await target(page);
+    return (await trayPieces(page)).some((p) => value(p) > value(t));
+  });
+  const t = await target(page);
+  const [answer] = solutions(t, await trayPieces(page));
+  const tooBig = (await trayPieces(page)).filter((p) => value(p) > value(t));
+  expect(tooBig.length).toBeGreaterThan(0);
+  for (const p of tooBig) expect(answer).not.toContain(`${p.num}/${p.den}`);
+});
+
+test("placing the one correct combination wins the round", async ({ page }) => {
   await solve(page);
   await expect(page.locator("#message")).toContainText("Rätt");
   await expect(page.locator("#board")).toHaveClass(/win/);
   await expect(page.locator("#done")).toHaveText("Nästa");
 });
 
-test("too few pieces gives a gentle hint and keeps the round open", async ({ page }) => {
-  let t = await target(page);
-  while (t.num < 2) {
-    await page.reload();
-    t = await target(page);
-  }
-  await dragPieces(page, t.num - 1);
+test("placed pieces stack up to the target total", async ({ page }) => {
+  const t = await target(page);
+  const [answer] = solutions(t, await trayPieces(page));
+  for (const key of answer) await dragPiece(page, key);
+  expect(total(await placedPieces(page))).toBeCloseTo(value(t), 9);
+});
+
+test("a piece that is too big gives the 'too much' hint", async ({ page }) => {
+  await reloadUntil(page, async () => {
+    const t = await target(page);
+    return (await trayPieces(page)).some((p) => value(p) > value(t));
+  });
+  const t = await target(page);
+  const big = (await trayPieces(page)).find((p) => value(p) > value(t))!;
+  await dragPiece(page, `${big.num}/${big.den}`);
   await page.click("#done");
-  await expect(page.locator("#message")).toContainText("Nästan");
+  await expect(page.locator("#message")).toContainText("för mycket");
   await expect(page.locator("#board")).not.toHaveClass(/win/);
 });
 
-test("too many pieces says one piece too many", async ({ page }) => {
-  let t = await target(page);
-  while (t.num + 1 > Math.min(t.den, t.num + 2) || t.num >= t.den) {
-    await page.reload();
-    t = await target(page);
-  }
-  await dragPieces(page, t.num + 1);
+test("an incomplete answer gives the 'too little' hint", async ({ page }) => {
+  const [answer] = solutions(await target(page), await trayPieces(page));
+  await dragPiece(page, answer[0]);
   await page.click("#done");
-  await expect(page.locator("#message")).toContainText("för mycket");
+  await expect(page.locator("#message")).toContainText("lite för lite");
+});
+
+test("pieces beyond one whole ring are refused", async ({ page }) => {
+  // keep dragging every piece in; the ring must never hold more than one whole
+  const count = (await trayPieces(page)).length;
+  for (let i = 0; i < count; i++) {
+    const left = await trayPieces(page);
+    await dragPiece(page, `${left[0].num}/${left[0].den}`);
+  }
+  expect(total(await placedPieces(page))).toBeLessThanOrEqual(1 + 1e-9);
+  expect((await placedPieces(page)).length + (await trayPieces(page)).length).toBe(count);
 });
 
 test("tapping a placed piece returns it to the tray", async ({ page }) => {
-  await dragPieces(page, 1);
-  const inTray = await page.locator("#tray .piece").count();
-  await page.locator(".slot.placed").first().dispatchEvent("click");
-  await expect(page.locator("#tray .piece")).toHaveCount(inTray + 1);
-  expect(await placed(page)).toBe(0);
+  const [answer] = solutions(await target(page), await trayPieces(page));
+  await dragPiece(page, answer[0]);
+  const inTray = (await trayPieces(page)).length;
+  await page.locator("#ring .placed").first().dispatchEvent("click");
+  expect(await trayPieces(page)).toHaveLength(inTray + 1);
+  expect(await placedPieces(page)).toHaveLength(0);
 });
 
 test("dropping a piece outside the ring puts it back", async ({ page }) => {
-  const before = await page.locator("#tray .piece").count();
+  const before = (await trayPieces(page)).length;
   const b = (await page.locator("#tray .piece").first().boundingBox())!;
-  await page.mouse.move(b.x + 10, b.y + 10);
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
   await page.mouse.down();
   await page.mouse.move(5, 5, { steps: 5 });
   await page.mouse.up();
-  await expect(page.locator("#tray .piece")).toHaveCount(before);
-  expect(await placed(page)).toBe(0);
+  expect(await trayPieces(page)).toHaveLength(before);
+  expect(await placedPieces(page)).toHaveLength(0);
 });
 
-test("a full ring never accepts an extra piece", async ({ page }) => {
-  const { den } = await target(page);
-  // Level 1 tray is capped at den pieces, so fill every slot and check nothing is left over.
-  await dragPieces(page, Math.min(den, await page.locator("#tray .piece").count()));
-  expect(await placed(page)).toBeLessThanOrEqual(den);
+test("every round is a different puzzle", async ({ page }) => {
+  const seen = new Set<string>();
+  for (let i = 0; i < 6; i++) {
+    const t = await target(page);
+    const tray = (await trayPieces(page)).map((p) => `${p.num}/${p.den}`).sort().join(",");
+    seen.add(`${t.num}/${t.den}|${tray}`);
+    await solve(page);
+    await page.click("#done");
+  }
+  expect(seen.size).toBeGreaterThanOrEqual(5);
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { KEY, seed, target } from "./helpers";
+import { KEY, seed, trayPieces } from "./helpers";
 
 async function openParentCorner(page: import("@playwright/test").Page) {
   const b = (await page.locator("#level").boundingBox())!;
@@ -35,7 +35,7 @@ test("the level picker jumps to another level", async ({ page }) => {
   await page.selectOption("#level-select", { value: "2" });
   await page.click("#close-parent");
   await expect(page.locator("#level")).toHaveText("Nivå 3");
-  expect((await target(page)).den).toBe(8);
+  expect((await trayPieces(page)).length).toBeGreaterThanOrEqual(6);
 });
 
 test("reset clears level and stars", async ({ page }) => {
@@ -54,7 +54,7 @@ test("free play respects the largest denominator", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#level")).toHaveText("Fri lek");
   for (let i = 0; i < 20; i++) {
-    expect((await target(page)).den).toBeLessThanOrEqual(4);
+    for (const p of await trayPieces(page)) expect(p.den).toBeLessThanOrEqual(4);
     await page.reload();
   }
 });

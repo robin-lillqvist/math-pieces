@@ -1,5 +1,14 @@
-import { LEVELS, check, effectiveLevel, generateTarget, nextLevelIndex, type Fraction } from "./fractions";
-import { drawRing, slotPath } from "./ring";
+import {
+  LEVELS,
+  check,
+  effectiveLevel,
+  fits,
+  generatePuzzle,
+  nextLevelIndex,
+  type Piece,
+  type Puzzle,
+} from "./fractions";
+import { denColour, drawRing, pieceWedgePath } from "./ring";
 import { makeDraggable } from "./drag";
 import { loadProgress, saveProgress } from "./storage";
 import { fractionWords, sv } from "./i18n/sv";
@@ -13,23 +22,19 @@ const doneBtn = $<HTMLButtonElement>("done");
 const board = $<HTMLElement>("board");
 
 const NS = "http://www.w3.org/2000/svg";
-const EXTRA_PIECES = 2;
+/** Screen pixels per ring unit for tray pieces; keeps their relative sizes true. */
+const PIECE_SCALE = 0.65;
 
 const progress = loadProgress();
-let target: Fraction;
-let filled: boolean[] = [];
-let totalPieces = 0;
+let puzzle: Puzzle;
+let placed: Piece[] = [];
 let solved = false;
-let slots: SVGPathElement[] = [];
-
-function placedCount(): number {
-  return filled.filter(Boolean).length;
-}
 
 function renderHeader(): void {
   const level = LEVELS[progress.levelIndex];
   $("level").textContent = sv.level(level.id, level.free);
-  $("fraction").innerHTML = `<span class="n">${target.num}</span>/<span class="d">${target.den}</span>`;
+  const { num, den } = puzzle.target;
+  $("fraction").innerHTML = `<span class="n">${num}</span>/<span class="d">${den}</span>`;
   $("stars").textContent = "⭐".repeat(Math.min(progress.stars, 10)) + (progress.stars > 10 ? "+" : "");
 }
 
@@ -37,77 +42,75 @@ function setMessage(text: string): void {
   message.textContent = text;
 }
 
-function makePieceEl(den: number): HTMLElement {
-  const el = document.createElement("div");
-  el.className = "piece";
+function makePieceEl(piece: Piece): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "piece";
+  wrap.dataset.id = String(piece.id);
+  wrap.dataset.num = String(piece.num);
+  wrap.dataset.den = String(piece.den);
+
   const s = document.createElementNS(NS, "svg");
   const path = document.createElementNS(NS, "path");
-  path.setAttribute("d", slotPath(den, 0));
-  const label = document.createElementNS(NS, "text");
-  label.textContent = `1/${den}`;
-  s.append(path, label);
-  el.appendChild(s);
-  tray.appendChild(el);
-  // Fit the viewBox to the wedge and centre the label on it.
+  path.setAttribute("d", pieceWedgePath(piece));
+  path.style.fill = denColour(piece.den);
+  s.appendChild(path);
+  wrap.appendChild(s);
+
+  const cap = document.createElement("span");
+  cap.className = "cap";
+  cap.textContent = `${piece.num}/${piece.den}`;
+  wrap.appendChild(cap);
+
+  tray.appendChild(wrap);
+  // Size the svg to the wedge so bigger fractions look bigger.
   const b = path.getBBox();
   s.setAttribute("viewBox", `${b.x} ${b.y} ${b.width} ${b.height}`);
-  label.setAttribute("x", String(b.x + b.width / 2));
-  label.setAttribute("y", String(b.y + b.height / 2));
-  label.setAttribute("font-size", String(Math.max(14, Math.min(b.width, b.height) / 3)));
-  return el;
+  s.style.width = `${b.width * PIECE_SCALE}px`;
+  s.style.height = `${b.height * PIECE_SCALE}px`;
+  return wrap;
+}
+
+function renderRing(): void {
+  const wedges = drawRing(svg, puzzle.target, placed);
+  wedges.forEach((w, i) => w.addEventListener("click", () => removePiece(placed[i])));
 }
 
 function renderTray(): void {
   tray.replaceChildren();
-  const remaining = totalPieces - placedCount();
-  for (let i = 0; i < remaining; i++) {
-    const el = makePieceEl(target.den);
-    makeDraggable(el, { onDrop: (x, y) => drop(x, y) });
+  for (const piece of puzzle.pieces) {
+    if (placed.includes(piece)) continue;
+    makeDraggable(makePieceEl(piece), { onDrop: (x, y) => drop(piece, x, y) });
   }
 }
 
-/** Which empty slot does a drop at this screen position land in? -1 if none. */
-function slotAt(clientX: number, clientY: number): number {
+function overRing(clientX: number, clientY: number): boolean {
   const r = svg.getBoundingClientRect();
   const scale = r.width / 220;
   const dx = (clientX - (r.left + r.width / 2)) / scale;
   const dy = (clientY - (r.top + r.height / 2)) / scale;
-  if (Math.hypot(dx, dy) > 130) return -1;
-  const den = target.den;
-  const step = (Math.PI * 2) / den;
-  const angle = (Math.atan2(dx, -dy) + Math.PI * 2) % (Math.PI * 2);
-  const hit = Math.floor(angle / step);
-  let best = -1;
-  let bestDist = Infinity;
-  for (let i = 0; i < den; i++) {
-    if (filled[i]) continue;
-    const d = Math.abs(i - hit);
-    const circ = Math.min(d, den - d);
-    if (circ < bestDist) {
-      best = i;
-      bestDist = circ;
-    }
-  }
-  return best;
+  return Math.hypot(dx, dy) <= 130;
 }
 
-function drop(x: number, y: number): boolean {
-  if (solved) return false;
-  const i = slotAt(x, y);
-  if (i < 0) return false;
-  filled[i] = true;
-  slots[i].classList.add("placed");
+function drop(piece: Piece, x: number, y: number): boolean {
+  if (solved || !overRing(x, y)) return false;
+  if (!fits(placed, piece)) {
+    setMessage(sv.noRoom);
+    sounds.miss(progress.muted);
+    return false;
+  }
+  placed.push(piece);
   setMessage("");
   sounds.place(progress.muted);
+  renderRing();
   renderTray();
   return true;
 }
 
-function removePiece(i: number): void {
-  if (solved || !filled[i]) return;
-  filled[i] = false;
-  slots[i].classList.remove("placed");
+function removePiece(piece: Piece): void {
+  if (solved || !placed.includes(piece)) return;
+  placed = placed.filter((p) => p !== piece);
   setMessage("");
+  renderRing();
   renderTray();
 }
 
@@ -135,19 +138,14 @@ function speak(text: string): void {
 
 function startRound(): void {
   const level = effectiveLevel(LEVELS[progress.levelIndex], progress.maxDen);
-  target = generateTarget(level, target);
-  filled = new Array(target.den).fill(false);
-  totalPieces = Math.min(target.den, target.num + EXTRA_PIECES);
+  puzzle = generatePuzzle(level, puzzle?.target);
+  placed = [];
   solved = false;
   board.classList.remove("win");
   doneBtn.textContent = sv.done;
-
-  const view = drawRing(svg, target.den, target.num);
-  slots = view.slots;
-  slots.forEach((s, i) => s.addEventListener("click", () => removePiece(i)));
-
   setMessage(sv.hint);
   renderHeader();
+  renderRing();
   renderTray();
 }
 
@@ -156,7 +154,7 @@ function onDone(): void {
     startRound();
     return;
   }
-  const verdict = check(target, placedCount());
+  const verdict = check(puzzle.target, placed);
   if (verdict === "correct") {
     solved = true;
     board.classList.add("win");
@@ -174,15 +172,13 @@ function onDone(): void {
     renderHeader();
     confetti();
     sounds.win(progress.muted);
-    if (!progress.muted) speak(fractionWords(target));
+    if (!progress.muted) speak(fractionWords(puzzle.target));
     return;
   }
   progress.streak = 0;
   saveProgress(progress);
   sounds.miss(progress.muted);
-  const diff = Math.abs(placedCount() - target.num);
-  if (verdict === "too-few") setMessage(diff === 1 ? sv.tooFew : sv.tooFewMany(diff));
-  else setMessage(diff === 1 ? sv.tooMany : sv.tooManyMany(diff));
+  setMessage(verdict === "too-few" ? sv.tooFew : sv.tooMany);
 }
 
 function setupParentCorner(): void {
@@ -191,7 +187,7 @@ function setupParentCorner(): void {
   const levelSelect = $<HTMLSelectElement>("level-select");
   LEVELS.forEach((l, i) => levelSelect.add(new Option(l.free ? "Fri lek" : String(l.id), String(i))));
   const maxDen = $<HTMLSelectElement>("max-den");
-  for (let d = 3; d <= 10; d++) maxDen.add(new Option(String(d), String(d)));
+  for (let d = 4; d <= 10; d++) maxDen.add(new Option(String(d), String(d)));
   maxDen.value = String(progress.maxDen);
   maxDen.addEventListener("change", () => {
     progress.maxDen = Number(maxDen.value);

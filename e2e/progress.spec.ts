@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { KEY, seed, solve, target } from "./helpers";
+import { KEY, reloadUntil, seed, solutions, solve, target, trayPieces } from "./helpers";
 
 test("five correct answers in a row unlock the next level and survive a reload", async ({ page }) => {
   await page.goto("/");
@@ -29,19 +29,21 @@ test("stars are earned per correct answer", async ({ page }) => {
   await expect(page.locator("#stars")).toHaveText("⭐");
 });
 
-test("level 5 can ask for 5/9 and it is solved with five 1/9 pieces", async ({ page }) => {
+test("later levels hand out bigger trays with more different sizes", async ({ page }) => {
   await seed(page, { levelIndex: 4, streak: 0, stars: 0, muted: true, maxDen: 10 });
   await page.goto("/");
-  for (let i = 0; i < 100; i++) {
-    const t = await target(page);
-    if (t.num === 5 && t.den === 9) break;
-    await page.reload();
-  }
-  expect(await target(page)).toEqual({ num: 5, den: 9 });
-  await expect(page.locator("#ring path.slot")).toHaveCount(9);
+  const pieces = await trayPieces(page);
+  expect(pieces.length).toBeGreaterThanOrEqual(7);
+  expect(new Set(pieces.map((p) => p.den)).size).toBeGreaterThanOrEqual(3);
+  expect(solutions(await target(page), pieces)).toHaveLength(1);
+});
+
+test("level 6 can hand out pieces like 3/4 and they still solve", async ({ page }) => {
+  await seed(page, { levelIndex: 5, streak: 0, stars: 0, muted: true, maxDen: 10 });
+  await page.goto("/");
+  await reloadUntil(page, async () => (await trayPieces(page)).some((p) => p.num > 1));
   await solve(page);
   await expect(page.locator("#message")).toContainText("Rätt");
-  await expect(page.locator(".slot.placed")).toHaveCount(5);
 });
 
 test("corrupt saved progress falls back to a fresh start", async ({ page }) => {

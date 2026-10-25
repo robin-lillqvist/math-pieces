@@ -49,11 +49,12 @@ header {
 
 #ring { width: 100%; height: 100%; }
 
-.slot { fill: #fff; stroke: #b2bec3; stroke-width: 2; stroke-linejoin: round; }
-.slot.target { fill: #ffe2bd; stroke: var(--target); stroke-dasharray: 5 3; }
-.slot.placed { fill: var(--placed); stroke: #2e86de; stroke-dasharray: none; cursor: pointer; }
-.slot-label { font-size: 12px; fill: #636e72; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
-.slot.placed + .slot-label { fill: #fff; }
+.ring-base { fill: #fff; stroke: #b2bec3; stroke-width: 2; }
+.target-arc { fill: #ffe2bd; }
+.target-outline { fill: none; stroke: #2d3436; stroke-width: 2.5; stroke-dasharray: 6 4; stroke-linejoin: round; pointer-events: none; }
+.placed { stroke: #fff; stroke-width: 2.5; stroke-linejoin: round; cursor: pointer; }
+.wedge-label { font-size: 12px; font-weight: 800; fill: #fff; text-anchor: middle; dominant-baseline: central; pointer-events: none; paint-order: stroke; stroke: rgb(0 0 0 / 0.35); stroke-width: 2px; }
+.start-tick { stroke: #2d3436; stroke-width: 3; stroke-linecap: round; }
 
 #message {
   position: absolute;
@@ -74,20 +75,29 @@ header {
   flex-wrap: wrap;
   justify-content: center;
   align-content: center;
-  gap: 12px;
+  align-items: flex-end;
+  gap: 4px 6px;
   width: 100%;
-  max-width: 520px;
+  max-width: 680px;
   min-height: 110px;
-  padding: 12px;
+  padding: 8px;
   background: #ffeaa7;
   border-radius: 24px;
 }
 
-.piece { width: 72px; height: 72px; cursor: grab; touch-action: none; }
-.piece svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.25)); }
-.piece path { fill: var(--placed); stroke: #2e86de; stroke-width: 3; stroke-linejoin: round; }
-.piece text { font-size: 18px; font-weight: 800; fill: #fff; text-anchor: middle; dominant-baseline: central; }
-.piece.dragging { position: fixed; z-index: 10; cursor: grabbing; transform: scale(1.25); }
+.piece {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px 4px;
+  cursor: grab;
+  touch-action: none;
+}
+.piece svg { overflow: visible; filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.25)); }
+.piece path { stroke: #fff; stroke-width: 3; stroke-linejoin: round; }
+.piece .cap { font-size: 1.1rem; font-weight: 800; }
+.piece.dragging { position: fixed; z-index: 10; cursor: grabbing; transform: scale(1.2); background: rgb(255 255 255 / 0.6); border-radius: 16px; }
 
 footer { padding-top: 4px; }
 
@@ -111,7 +121,7 @@ dialog label { display: block; margin: 12px 0; }
 dialog select { font: inherit; }
 button.secondary { font-size: 1rem; padding: 10px 20px; margin: 4px 4px 0 0; background: #636e72; box-shadow: 0 3px 0 #2d3436; }
 
-.win .slot.placed { fill: var(--good); stroke: #10ac84; }
+.win .placed { stroke: var(--good); stroke-width: 4; }
 
 .confetti {
   position: fixed;
